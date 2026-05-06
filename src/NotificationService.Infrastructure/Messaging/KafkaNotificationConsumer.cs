@@ -32,6 +32,9 @@ public class KafkaNotificationConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        // Yield immediately so Kestrel can finish starting before this loop blocks on Consume()
+        await Task.Yield();
+
         var bootstrapServers = _configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
 
         var config = new ConsumerConfig
@@ -44,9 +47,9 @@ public class KafkaNotificationConsumer : BackgroundService
         };
 
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
-        consumer.Subscribe(["job.status.changed", "job.application.submitted"]);
+        consumer.Subscribe(["job.application.created", "job.application.updated"]);
 
-        _logger.LogInformation("Kafka consumer started — subscribed to job.status.changed, job.application.submitted");
+        _logger.LogInformation("Kafka consumer started — subscribed to job.application.created, job.application.updated");
 
         while (!ct.IsCancellationRequested)
         {
@@ -60,17 +63,17 @@ public class KafkaNotificationConsumer : BackgroundService
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var service = scope.ServiceProvider.GetRequiredService<NotificationService.Core.Services.NotificationService>();
 
-                if (result.Topic == "job.status.changed")
+                if (result.Topic == "job.application.created")
                 {
-                    var evt = JsonSerializer.Deserialize<JobStatusChangedEvent>(result.Message.Value, JsonOptions);
+                    var evt = JsonSerializer.Deserialize<JobCreatedEvent>(result.Message.Value, JsonOptions);
                     if (evt is not null)
-                        await service.HandleStatusChangedAsync(evt, ct);
+                        await service.HandleJobCreatedAsync(evt, ct);
                 }
-                else if (result.Topic == "job.application.submitted")
+                else if (result.Topic == "job.application.updated")
                 {
-                    var evt = JsonSerializer.Deserialize<ApplicationSubmittedEvent>(result.Message.Value, JsonOptions);
+                    var evt = JsonSerializer.Deserialize<JobUpdatedEvent>(result.Message.Value, JsonOptions);
                     if (evt is not null)
-                        await service.HandleApplicationSubmittedAsync(evt, ct);
+                        await service.HandleJobUpdatedAsync(evt, ct);
                 }
 
                 consumer.Commit(result);
