@@ -1,12 +1,23 @@
 # job-tracker-app-notification-service
 
-Processes Kafka events and sends configurable email reminders to users.
+Kafka consumer service that processes job application events asynchronously. Logs all events and has MailKit SMTP infrastructure in place for future email delivery. Runs as a background service with no user-facing HTTP endpoints beyond a health check.
 
 ## Technology
-- .NET 8 Web API
-- C#
-- PostgreSQL
+- .NET 8
+- Apache Kafka (Confluent.Kafka consumer, BackgroundService)
+- MailKit SMTP
 - Docker
+
+## Kafka Topics Consumed
+
+| Topic | Action |
+|-------|--------|
+| `job.application.created` | Logs the event (email delivery reserved for future implementation) |
+| `job.application.updated` | Logs the event |
+
+## Design
+
+Kafka is used as an async work queue. The job service publishes create/edit payloads immediately and returns a response to the user. This service consumes those events independently, decoupling email delivery from the request path. At scale, additional consumers (AI service, analytics) can subscribe to the same topics without any changes to the job service.
 
 ## Getting started
 
@@ -16,29 +27,26 @@ dotnet build
 dotnet run --project src/NotificationService.Api
 ```
 
-## Running with Docker
-
-```bash
-docker build -t job-tracker-app-notification-service .
-docker run -p 5005:5005 job-tracker-app-notification-service
-```
-
 ## Environment variables
 
 | Variable | Description |
 |----------|-------------|
-| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string |
-| `Auth0__Domain` | Auth0 domain |
-| `Auth0__Audience` | Auth0 API audience |
-| `Kafka__BootstrapServers` | Kafka broker address |
+| `Kafka__BootstrapServers` | Kafka broker address (default: localhost:9092) |
+| `Email__SmtpHost` | SMTP server hostname |
+| `Email__SmtpPort` | SMTP port (587 for TLS) |
+| `Email__Username` | SMTP account username |
+| `Email__Password` | SMTP app password (not account password) |
+| `Email__FromAddress` | Sender email address |
+| `Email__FromName` | Sender display name |
+| `Email__UseSsl` | Enable TLS (true/false) |
 
 ## Project structure
 
 ```
 src/
-  NotificationService.Api/          # Web API entry point, controllers, middleware
-  NotificationService.Core/         # Domain models, interfaces, business logic
-  NotificationService.Infrastructure/ # Data access, Kafka, external integrations
+  NotificationService.Api/            # Startup, DI registration, health check
+  NotificationService.Core/           # Event models, notification service, interfaces
+  NotificationService.Infrastructure/ # Kafka consumer, SMTP email sender
 tests/
   NotificationService.UnitTests/
   NotificationService.IntegrationTests/
