@@ -47,9 +47,9 @@ public class KafkaNotificationConsumer : BackgroundService
         };
 
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
-        consumer.Subscribe(["job.application.created", "job.application.updated"]);
+        consumer.Subscribe(["job.application.created", "job.application.updated", "feedback.submitted"]);
 
-        _logger.LogInformation("Kafka consumer started — subscribed to job.application.created, job.application.updated");
+        _logger.LogInformation("Kafka consumer started — subscribed to job.application.created, job.application.updated, feedback.submitted");
 
         while (!ct.IsCancellationRequested)
         {
@@ -74,6 +74,12 @@ public class KafkaNotificationConsumer : BackgroundService
                     var evt = JsonSerializer.Deserialize<JobUpdatedEvent>(result.Message.Value, JsonOptions);
                     if (evt is not null)
                         await service.HandleJobUpdatedAsync(evt, ct);
+                }
+                else if (result.Topic == "feedback.submitted")
+                {
+                    var evt = JsonSerializer.Deserialize<FeedbackSubmittedEvent>(result.Message.Value, JsonOptions);
+                    if (evt is not null)
+                        await service.HandleFeedbackSubmittedAsync(evt, ct);
                 }
 
                 consumer.Commit(result);
